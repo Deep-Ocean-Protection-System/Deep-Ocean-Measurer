@@ -52,6 +52,10 @@ func traceProcesses(config data.TraceConfig) error {
 	if err != nil {
 		return err
 	}
+	record := data.Record{
+		Programs:     config.Programs,
+		StartRecTime: startTime,
+	}
 	// fmt.Println("time out: ", config.TimeOut)
 
 	// tracing processes with timeout
@@ -131,8 +135,12 @@ func traceProcesses(config data.TraceConfig) error {
 			}
 
 			// store data to json file
-			//file, _ := json.Marshal(config.Programs)
-			file, _ := json.MarshalIndent(config.Programs, "", "")
+			//file, err := json.Marshal(config.Programs)
+			record.EndRecTime = time.Now()
+			file, err := json.MarshalIndent(record, " ", " ")
+			if err != nil {
+				return err
+			}
 
 			err = ioutil.WriteFile(config.OutPath, file, 0644)
 			if err != nil {
@@ -232,10 +240,12 @@ func main() {
 			log.Fatal(err)
 		}
 
-		err = json.Unmarshal(jsonByte, &config.Programs)
+		var record data.Record
+		err = json.Unmarshal(jsonByte, &record)
 		if err != nil {
 			log.Fatal(err)
 		}
+		config.Programs = record.Programs
 	}
 
 	err = traceProcesses(config)

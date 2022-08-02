@@ -30,6 +30,12 @@ type (
 		OutPath        string          `json:"out_path"`
 		TimeOut        string          `json:"time_out"`
 	}
+
+	Record struct {
+		Programs     []ProgramEntity `json:"programs"`
+		StartRecTime time.Time       `json:"start_rec_time"`
+		EndRecTime   time.Time       `json:"end_rec_time"`
+	}
 )
 
 func NewProgramEntity(dataList []string) ProgramEntity {
