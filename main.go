@@ -142,9 +142,9 @@ func traceProcesses(config data.TraceConfig) error {
 			}
 
 			// store data to json file
-			//file, err := json.Marshal(config.Programs)
+			file, err := json.Marshal(config.Programs)
 			record.EndRecTime = time.Now()
-			file, err := json.MarshalIndent(record, " ", " ")
+			// file, err := json.MarshalIndent(record, " ", " ")
 			if err != nil {
 				return err
 			}
