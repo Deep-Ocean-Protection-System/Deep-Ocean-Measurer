@@ -26,10 +26,17 @@ func cleanUp() {
 func traceProcesses(config data.TraceConfig) error {
 	headers := []string{"Path", "ProcessName", "Id", "CPU", "WS"}
 
-	// construct string of process list
 	var processesStr string
-
 	for _, prog := range config.Programs {
+		// launch each process if needed
+		if prog.ForceRun {
+			err := utils.CallProcessWDiffCtx(prog.Path, prog.Arguments)
+			if err != nil {
+				fmt.Println("cannot spawn", prog.Path, ":", err.Error())
+			}
+		}
+
+		// construct string of process list
 		progStr := prog.Path
 		for i := len(progStr) - 1; i >= 0; i-- {
 			if string(progStr[i]) == `\` || string(progStr[i]) == `/` {
@@ -245,7 +252,16 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		config.Programs = record.Programs
+		// config.Programs = record.Programs
+		// restore data for programs that existing in config and checkpoint
+		for i := range config.Programs {
+			for j := range record.Programs {
+				if strings.EqualFold(config.Programs[i].Path, record.Programs[j].Path) && strings.EqualFold(config.Programs[i].Arguments, record.Programs[j].Arguments) {
+					config.Programs[i].ProcInsts = record.Programs[j].ProcInsts
+				}
+			}
+		}
+		// fmt.Printf("%+v\n", config.Programs)
 	}
 
 	err = traceProcesses(config)

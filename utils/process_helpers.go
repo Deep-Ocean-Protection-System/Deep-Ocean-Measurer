@@ -32,6 +32,20 @@ func CallProcess(processName string, getOutput bool, args ...string) (isOK bool,
 	return isSuccess, strResult, err
 }
 
+func CallProcessWDiffCtx(processName string, args ...string) error {
+	var strArg string = ""
+
+	for _, arg := range args {
+		strArg += arg
+		strArg += " "
+	}
+	// fmt.Println("Path: ", processName)
+	// fmt.Println("Args: ", strArg)
+	cmd := exec.Command("C:\\Windows\\System32\\cmd.exe", "/c", "start", "/B", processName, strArg)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	return cmd.Start()
+}
+
 func FetchDataByPowershell(psCmd string, csvFilePath string) (res [][]string, err error) {
 	var lines [][]string
 	// change the file name into a varriable for easier managing
@@ -53,4 +67,3 @@ func FetchDataByPowershell(psCmd string, csvFilePath string) (res [][]string, er
 	csvList.Close()
 	return lines, err
 }
-

@@ -24,9 +24,15 @@
             "program_path": "C:\\Program Files\\WindowsApps\\Microsoft.YourPhone_1.22052.136.0_x64__8wekyb3d8bbwe\\YourPhone.exe",
             "program_args": "",
             "force_run": false
+        },
+        {
+            "program_path": "C:\\Users\\Admin\\OneDrive\\Desktop\\dummy.exe",
+            "program_args": "",
+            "force_run": true
         }
+        
     ],
-    "time_out": "10s",
+    "time_out": "2s",
     "out_path": "program_stats.json",
     "checkpoint_path": "program_stats.json"
 }
