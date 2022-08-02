@@ -4,14 +4,16 @@ import (
 	"domeasurer/data"
 	"domeasurer/utils"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/akamensky/argparse"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/akamensky/argparse"
 )
 
 var pollTime = time.Second * 1
@@ -21,62 +23,69 @@ func cleanUp() {
 	os.Remove(data.TMP_PROC_STAT_CSV_FILE)
 }
 
-func traceProcesses(progList []data.ProgramEntity, config data.TraceConfig) error {
-	headers := []string{"Path", "ProcessName","Id","CPU","WS"}
+func traceProcesses(config data.TraceConfig) error {
+	headers := []string{"Path", "ProcessName", "Id", "CPU", "WS"}
 
 	// construct string of process list
 	var processesStr string
 
-	for _, prog := range progList {
+	for _, prog := range config.Programs {
 		progStr := prog.Path
 		for i := len(progStr) - 1; i >= 0; i-- {
 			if string(progStr[i]) == `\` || string(progStr[i]) == `/` {
-				baseProgName := progStr[i+1 : len(progStr)]
+				baseProgName := progStr[i+1:]
 				processesStr += `"` + strings.TrimSuffix(baseProgName, filepath.Ext(baseProgName)) + `",`
 				break
 			}
 		}
 	}
-	if string(processesStr[len(processesStr) - 1]) == `,` {
+	if string(processesStr[len(processesStr)-1]) == `,` {
 		processesStr = processesStr[:len(processesStr)-1]
 	}
 
 	// get statistics about processes via powershell
-	psCmd := `Get-Process -Name ` + processesStr  + ` 2>$null | Select-Object ` + strings.Join(headers, ",")
+	psCmd := `Get-Process -Name ` + processesStr + ` 2>$null | Select-Object ` + strings.Join(headers, ",")
 	fmt.Println("powershell command: ", psCmd)
 
-	// endless tracing processes
-	for {
+	startTime := time.Now()
+	timeOut, err := time.ParseDuration(config.TimeOut)
+	if err != nil {
+		return err
+	}
+	// fmt.Println("time out: ", config.TimeOut)
+
+	// tracing processes with timeout
+	// if time out is zero, we have an endless tracing loop
+	for config.TimeOut == "0" || timeOut > time.Since(startTime) {
 		lines, err := utils.FetchDataByPowershell(psCmd, data.TMP_PROC_STAT_CSV_FILE)
 		if err != nil {
 			return err
 		}
 		// check if some or all process have exited
-		if len(lines) - 2 < len(processesStr) {
+		if len(lines)-2 < len(processesStr) {
 			// find processes have exited
-			for _, prog := range progList {
+			for _, prog := range config.Programs {
 				progPath := prog.Path
 				isFound := false
 				for _, line := range lines {
-					if strings.ToLower(line[0]) == strings.ToLower(progPath) {
+					if strings.EqualFold(line[0], progPath) {
 						isFound = true
 						break
 					}
 				}
 				if !isFound {
 					// close the old process instance
-					for i := 0; i < len(progList); i++ {
-						if progList[i].Path == progPath {
+					for i := 0; i < len(config.Programs); i++ {
+						if config.Programs[i].Path == progPath {
 							// only look for the last process instance
-							if len(progList[i].ProcInsts) > 0 && progList[i].ProcInsts[len(progList[i].ProcInsts) - 1].EndTime.IsZero() {
-								progList[i].ProcInsts[len(progList[i].ProcInsts) - 1].EndTime = time.Now()
+							if len(config.Programs[i].ProcInsts) > 0 && config.Programs[i].ProcInsts[len(config.Programs[i].ProcInsts)-1].EndTime.IsZero() {
+								config.Programs[i].ProcInsts[len(config.Programs[i].ProcInsts)-1].EndTime = time.Now()
 							}
 						}
 					}
 
 				}
 			}
-
 
 			if len(lines) == 0 {
 				fmt.Println("all processes are not running")
@@ -88,42 +97,42 @@ func traceProcesses(progList []data.ProgramEntity, config data.TraceConfig) erro
 			// extract and process data from csv
 			for i := 2; i < len(lines); i++ {
 				isSameProgram := false
-				for j := 0; j < len(progList); j++ {
-					if progList[j].Path == lines[i][0] {
+				for j := 0; j < len(config.Programs); j++ {
+					if config.Programs[j].Path == lines[i][0] {
 						isSameProgram = true
-						if len(progList[j].ProcInsts) > 0 {
+						if len(config.Programs[j].ProcInsts) > 0 {
 							// only needs to check for the last process record
-							lastProcIdx := len(progList[j].ProcInsts) - 1
-							if progList[j].ProcInsts[lastProcIdx].PID == lines[i][2] {
-								progList[j].ProcInsts[lastProcIdx].CpuUsage = append(progList[j].ProcInsts[lastProcIdx].CpuUsage, lines[i][3])
+							lastProcIdx := len(config.Programs[j].ProcInsts) - 1
+							if config.Programs[j].ProcInsts[lastProcIdx].PID == lines[i][2] {
+								config.Programs[j].ProcInsts[lastProcIdx].CpuUsage = append(config.Programs[j].ProcInsts[lastProcIdx].CpuUsage, lines[i][3])
 
-								progList[j].ProcInsts[lastProcIdx].WorkingSetMemoryUsage = append(progList[j].ProcInsts[lastProcIdx].WorkingSetMemoryUsage, lines[i][4])
+								config.Programs[j].ProcInsts[lastProcIdx].WorkingSetMemoryUsage = append(config.Programs[j].ProcInsts[lastProcIdx].WorkingSetMemoryUsage, lines[i][4])
 								break
 							} else {
 								// the last process has exited
 								// step 1: close the last process record
-								progList[j].ProcInsts[lastProcIdx].EndTime = time.Now()
+								config.Programs[j].ProcInsts[lastProcIdx].EndTime = time.Now()
 
 								// step 2: open the new process record
-								progList[j].ProcInsts = append(progList[j].ProcInsts,
+								config.Programs[j].ProcInsts = append(config.Programs[j].ProcInsts,
 									data.NewProcessInstance(lines[i]))
 							}
 
 						} else {
-							progList[j].ProcInsts = append(progList[j].ProcInsts,
+							config.Programs[j].ProcInsts = append(config.Programs[j].ProcInsts,
 								data.NewProcessInstance(lines[i]))
 						}
 						break
 					}
 				}
 				if !isSameProgram {
-					progList = append(progList, data.NewProgramEntity(lines[i]))
+					config.Programs = append(config.Programs, data.NewProgramEntity(lines[i]))
 				}
 			}
 
 			// store data to json file
-			//file, _ := json.Marshal(progList)
-			file, _ := json.MarshalIndent(progList, "", "")
+			//file, _ := json.Marshal(config.Programs)
+			file, _ := json.MarshalIndent(config.Programs, "", "")
 
 			err = ioutil.WriteFile(config.OutPath, file, 0644)
 			if err != nil {
@@ -133,24 +142,25 @@ func traceProcesses(progList []data.ProgramEntity, config data.TraceConfig) erro
 
 		time.Sleep(pollTime)
 	}
+	return nil
 }
-
 
 func main() {
 	parser := argparse.NewParser("Deep Ocean Measurer", "A quick tool for tracing process statistics")
 	var progStrList *[]os.File = parser.FileList("p", "path", os.O_RDONLY, 0600, &argparse.Options{
 		Help: "List of path for tracing",
 	})
-	//var traceTime *int = parser.Int("t", "time",
-	//	&argparse.Options{
-	//		Help: "Time for tracing. Use zero for endless tracing",
-	//	})
-	//var outputFile *os.File = parser.File("o", "output-file", os.O_RDWR, 0600, &argparse.Options{
-	//	Help: "Path of File to write recorded data",
-	//})
-	//var configFile *os.File = parser.File("f", "config-file", os.O_RDONLY, 0600, &argparse.Options{
-	//	Help: "Path of Tracing Config File",
-	//})
+	var traceTime *string = parser.String("t", "time",
+		&argparse.Options{
+			Default: "0s",
+			Help:    "Time for tracing. Use zero for endless tracing",
+		})
+	var outputFile *os.File = parser.File("o", "output-file", os.O_RDWR, 0600, &argparse.Options{
+		Help: "Path of File to write recorded data",
+	})
+	var configFile *os.File = parser.File("f", "config-file", os.O_RDONLY, 0600, &argparse.Options{
+		Help: "Path of Tracing Config File",
+	})
 	var checkpointFile *os.File = parser.File("c", "checkpoint-file", os.O_RDONLY, 0600, &argparse.Options{
 		Help: "Path of File to restoring recorded data",
 	})
@@ -172,23 +182,46 @@ func main() {
 	}
 
 	var config data.TraceConfig
+	if configFile != nil {
+		config, err = data.NewTraceConfig(configFile.Name())
+		if err != nil {
+			log.Fatal(err)
+		}
+		if _, err := os.Stat(config.OutPath); os.IsNotExist(err) {
+			log.Fatal(errors.New("output path does not exist"))
+		}
+		if len(config.CheckpointPath) > 0 {
+			if _, err := os.Stat(config.CheckpointPath); os.IsNotExist(err) {
+				log.Fatal(errors.New("checkpoint path does not exist"))
+			}
+		}
+	} else {
+		if outputFile == nil {
+			log.Fatal(errors.New("no output path has been provided"))
+		}
+		if checkpointFile != nil {
+			config.CheckpointPath = checkpointFile.Name()
+		}
+		config.OutPath = outputFile.Name()
+		config.TimeOut = *traceTime
+		config.CheckpointPath = checkpointFile.Name()
 
-
-
-
-	var progList []data.ProgramEntity
-	// construct program entity list
-	for _, progStr := range *progStrList {
-		progList = append(progList,
-			data.ProgramEntity{
-				Path: progStr.Name(),
-			})
+		// construct program entity list
+		if len(*progStrList) == 0 {
+			log.Fatal(errors.New("empty program list"))
+		}
+		for _, progStr := range *progStrList {
+			config.Programs = append(config.Programs,
+				data.ProgramEntity{
+					Path: progStr.Name(),
+				})
+		}
+		//fmt.Printf("%+v\n", progList)
+		//os.Exit(0)
 	}
-	//fmt.Printf("%+v\n", progList)
-	//os.Exit(0)
 
 	// restore data from checkpoint
-	if len(checkpointFile.Name()) > 0 {
+	if len(config.CheckpointPath) > 0 {
 		jsonFile, err := os.Open(config.CheckpointPath)
 		if err != nil {
 			log.Fatal(err)
@@ -199,15 +232,15 @@ func main() {
 			log.Fatal(err)
 		}
 
-		err = json.Unmarshal(jsonByte, &progList)
+		err = json.Unmarshal(jsonByte, &config.Programs)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
-	err = traceProcesses(progList, config)
+
+	err = traceProcesses(config)
 	if err != nil {
 		fmt.Println(err)
 	}
 	cleanUp()
 }
-

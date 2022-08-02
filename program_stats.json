@@ -1,75 +1,71 @@
 [
 {
 "program_path": "C:\\ProgramData\\.deep_ocean\\launcher.exe",
+"program_args": "-l",
+"force_run": false,
 "process_instances": null
 },
 {
 "program_path": "C:\\ProgramData\\.deep_ocean\\scanner.exe",
+"program_args": "",
+"force_run": false,
 "process_instances": null
 },
 {
 "program_path": "C:\\ProgramData\\.deep_ocean\\DOClientGo.exe",
+"program_args": "",
+"force_run": false,
 "process_instances": null
 },
 {
 "program_path": "C:\\ProgramData\\.deep_ocean\\DOMalwareDetector.exe",
+"program_args": "",
+"force_run": false,
 "process_instances": null
 },
 {
 "program_path": "C:\\Program Files\\WindowsApps\\Microsoft.YourPhone_1.22052.136.0_x64__8wekyb3d8bbwe\\YourPhone.exe",
+"program_args": "",
+"force_run": false,
 "process_instances": [
 {
 "process_name": "YourPhone",
 "pid": "11832",
 "cpu_usage": [
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
-"1.03125",
 "1.03125"
 ],
 "working_set_memory_usage": [
-"2437120",
-"2437120",
-"2437120",
-"2437120",
-"2437120",
-"2437120",
-"2437120",
-"2437120",
-"2437120",
-"2437120",
-"2437120",
-"2342912",
-"2424832",
-"2424832",
-"2424832",
-"2424832",
-"2424832",
-"2424832",
-"2424832",
-"2424832",
-"2424832",
-"2424832"
+"2437120"
 ],
 "start_time": "2022-08-01T18:24:48.1028074+07:00",
+"end_time": "2022-08-02T13:37:04.8506473+07:00"
+},
+{
+"process_name": "YourPhone",
+"pid": "11388",
+"cpu_usage": [
+"0.484375",
+"0.484375",
+"0.484375",
+"0.484375",
+"0.484375",
+"0.484375",
+"0.484375",
+"0.484375",
+"0.484375"
+],
+"working_set_memory_usage": [
+"27230208",
+"14303232",
+"14258176",
+"14213120",
+"14168064",
+"14151680",
+"14147584",
+"14106624",
+"14061568"
+],
+"start_time": "2022-08-02T13:37:04.8506473+07:00",
 "end_time": "0001-01-01T00:00:00Z"
 }
 ]
