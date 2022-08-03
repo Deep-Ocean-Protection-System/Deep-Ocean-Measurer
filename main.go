@@ -16,7 +16,7 @@ import (
 	"github.com/akamensky/argparse"
 )
 
-var pollTime = time.Second * 1
+var pollTime = time.Second * 5
 
 func cleanUp() {
 	// remove temp proc stat csv file
@@ -30,7 +30,8 @@ func traceProcesses(config data.TraceConfig) error {
 	for _, prog := range config.Programs {
 		// launch each process if needed
 		if prog.ForceRun {
-			err := utils.CallProcessWDiffCtx(prog.Path, prog.Arguments)
+			fmt.Println("Running process without wait: ", prog.Path, prog.Arguments)
+			err := utils.CallProcessWithoutWait(prog.Path, prog.Arguments)
 			if err != nil {
 				fmt.Println("cannot spawn", prog.Path, ":", err.Error())
 			}
@@ -46,10 +47,12 @@ func traceProcesses(config data.TraceConfig) error {
 			}
 		}
 	}
-	if string(processesStr[len(processesStr)-1]) == `,` {
+	if len(processesStr) > 0 && string(processesStr[len(processesStr)-1]) == `,` {
 		processesStr = processesStr[:len(processesStr)-1]
 	}
 
+	//fmt.Println("wait for 2 seconds before tracing")
+	//time.Sleep(2 * time.Second)
 	// get statistics about processes via powershell
 	psCmd := `Get-Process -Name ` + processesStr + ` 2>$null | Select-Object ` + strings.Join(headers, ",")
 	fmt.Println("powershell command: ", psCmd)
@@ -72,78 +75,83 @@ func traceProcesses(config data.TraceConfig) error {
 		if err != nil {
 			return err
 		}
-		// check if some or all process have exited
-		if len(lines)-2 < len(processesStr) {
-			// find processes have exited
-			for _, prog := range config.Programs {
-				progPath := prog.Path
-				isFound := false
+
+		// find processes have exited
+		for progIdx := range record.Programs {
+			for procIdx := range record.Programs[progIdx].ProcInsts {
+				isFoundProc := false
 				for _, line := range lines {
-					if strings.EqualFold(line[0], progPath) {
-						isFound = true
+					if strings.EqualFold(line[0], record.Programs[progIdx].Path) &&
+						strings.EqualFold(line[2], record.Programs[progIdx].ProcInsts[procIdx].PID) {
+						isFoundProc = true
 						break
 					}
 				}
-				if !isFound {
-					// close the old process instance
-					for i := 0; i < len(config.Programs); i++ {
-						if config.Programs[i].Path == progPath {
-							// only look for the last process instance
-							if len(config.Programs[i].ProcInsts) > 0 && config.Programs[i].ProcInsts[len(config.Programs[i].ProcInsts)-1].EndTime.IsZero() {
-								config.Programs[i].ProcInsts[len(config.Programs[i].ProcInsts)-1].EndTime = time.Now()
-							}
-						}
-					}
-
+				if !isFoundProc {
+					record.Programs[progIdx].ProcInsts[procIdx].EndTime = time.Now()
 				}
-			}
-
-			if len(lines) == 0 {
-				fmt.Println("all processes are not running")
-				return nil
 			}
 		}
 
+		if len(lines) == 0 {
+			fmt.Println("All processes are not running. Saving the latest record...")
+			// store data to json file
+			record.EndRecTime = time.Now()
+
+			file, err := json.Marshal(record)
+			if err != nil {
+				return err
+			}
+
+			err = ioutil.WriteFile(config.OutPath, file, 0644)
+			if err != nil {
+				return err
+			}
+			fmt.Println("Save successfully!")
+			return nil
+		}
+
+		//fmt.Println("Number of programs: ", len(record.Programs))
 		{
 			// extract and process data from csv
 			for i := 2; i < len(lines); i++ {
 				isSameProgram := false
-				for j := 0; j < len(config.Programs); j++ {
-					if config.Programs[j].Path == lines[i][0] {
+				for j := 0; j < len(record.Programs); j++ {
+					if record.Programs[j].Path == lines[i][0] {
 						isSameProgram = true
-						if len(config.Programs[j].ProcInsts) > 0 {
-							// only needs to check for the last process record
-							lastProcIdx := len(config.Programs[j].ProcInsts) - 1
-							if config.Programs[j].ProcInsts[lastProcIdx].PID == lines[i][2] {
-								config.Programs[j].ProcInsts[lastProcIdx].CpuUsage = append(config.Programs[j].ProcInsts[lastProcIdx].CpuUsage, lines[i][3])
+						if len(record.Programs[j].ProcInsts) > 0 {
+							isFoundProc := false
+							for procIdx := range record.Programs[j].ProcInsts {
+								if strings.EqualFold(lines[i][0], record.Programs[j].Path) && strings.EqualFold(lines[i][2],  record.Programs[j].ProcInsts[procIdx].PID) {
+									record.Programs[j].ProcInsts[procIdx].CpuUsage = append(record.Programs[j].ProcInsts[procIdx].CpuUsage, lines[i][3])
 
-								config.Programs[j].ProcInsts[lastProcIdx].WorkingSetMemoryUsage = append(config.Programs[j].ProcInsts[lastProcIdx].WorkingSetMemoryUsage, lines[i][4])
-								break
-							} else {
-								// the last process has exited
-								// step 1: close the last process record
-								config.Programs[j].ProcInsts[lastProcIdx].EndTime = time.Now()
+									record.Programs[j].ProcInsts[procIdx].WorkingSetMemoryUsage = append(record.Programs[j].ProcInsts[procIdx].WorkingSetMemoryUsage, lines[i][4])
 
-								// step 2: open the new process record
-								config.Programs[j].ProcInsts = append(config.Programs[j].ProcInsts,
+									isFoundProc = true
+									break
+								}
+							}
+							if !isFoundProc {
+								// open the new process record
+								record.Programs[j].ProcInsts = append(record.Programs[j].ProcInsts,
 									data.NewProcessInstance(lines[i]))
 							}
-
 						} else {
-							config.Programs[j].ProcInsts = append(config.Programs[j].ProcInsts,
+							record.Programs[j].ProcInsts = append(record.Programs[j].ProcInsts,
 								data.NewProcessInstance(lines[i]))
 						}
 						break
 					}
 				}
 				if !isSameProgram {
-					config.Programs = append(config.Programs, data.NewProgramEntity(lines[i]))
+					record.Programs = append(record.Programs, data.NewProgramEntity(lines[i]))
 				}
 			}
 
 			// store data to json file
-			file, err := json.Marshal(config.Programs)
 			record.EndRecTime = time.Now()
+
+			file, err := json.Marshal(record)
 			// file, err := json.MarshalIndent(record, " ", " ")
 			if err != nil {
 				return err

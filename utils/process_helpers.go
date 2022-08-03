@@ -32,8 +32,25 @@ func CallProcess(processName string, getOutput bool, args ...string) (isOK bool,
 	return isSuccess, strResult, err
 }
 
-func CallProcessWDiffCtx(processName string, args ...string) error {
+func CallProcessWithoutWait(processName string, args ...string) error {
 	var strArg string = ""
+
+	for _, arg := range args {
+		strArg += arg
+		strArg += " "
+	}
+	if len(strArg) > 0 && string(strArg[len(strArg)-1]) == ` ` {
+		strArg = strArg[:len(strArg)-1]
+	}
+	// fmt.Println("Path: ", processName)
+	// fmt.Println("Args: ", strArg)
+	cmd := exec.Command(processName, strArg)
+	//cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	return cmd.Start()
+}
+
+func CallProcessWDiffCtx(processName string, args ...string) error {
+	var strArg string = " "
 
 	for _, arg := range args {
 		strArg += arg
