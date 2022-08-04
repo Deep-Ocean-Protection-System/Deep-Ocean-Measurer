@@ -1,0 +1,27 @@
+{
+    "programs": [
+        {
+            "program_path": "C:\\ProgramData\\.deep_ocean\\launcher.exe",
+            "program_args": "-l",
+            "force_run": true
+        },
+        {
+            "program_path": "C:\\ProgramData\\.deep_ocean\\scanner.exe",
+            "program_args": "",
+            "force_run": false
+        },
+        {
+            "program_path": "C:\\ProgramData\\.deep_ocean\\DOClientGo.exe",
+            "program_args": "",
+            "force_run": false
+        },
+        {
+            "program_path": "C:\\ProgramData\\.deep_ocean\\DOMalwareDetector.exe",
+            "program_args": "",
+            "force_run": false
+        }
+        
+    ],
+    "time_out": "1h",
+    "out_path": "program_stats.json"
+}
